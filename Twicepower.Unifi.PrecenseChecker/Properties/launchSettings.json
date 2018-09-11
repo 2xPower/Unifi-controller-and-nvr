@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TwicePower.Unifi.PrecenseChecker": {
+      "commandName": "Project",
+      "commandLineArgs": "--help"
+    }
+  }
+}
