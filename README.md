@@ -24,8 +24,7 @@ Go to [releases](https://github.com/2xPower/Unifi-controller-and-nvr/releases) a
 Builds are available for Linux x64, Linux on ARM and Windows systems.
 
 Unzip the contents of the zip file you downloaded and complete the settings.
-Personally I use the ARM version - the rest is not tested but should work.
-I use a cronjob to schedule the console app to run every 10 minutes.
+I use a cronjob to schedule the application to run every 10 minutes on a Raspberry Pi 2 (linux-arm).
 
 ## Complete the settings
 The file appsettings.json contains all the settings
