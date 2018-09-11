@@ -12,6 +12,58 @@ But when we are not at home, the camera's should start recording on motion event
 
 
 ## Example console output
-![alt text][logo]
+![screenshot text](https://raw.githubusercontent.com/2xPower/Unifi-controller-and-nvr/master/Screenshot.PNG "Example console output")
 
-[logo]: https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "Logo Title Text 2"
+
+# Deployment
+## Download the build for your system
+
+## Complete the settings
+The file appsettings.json contains all the settings
+
+```json
+{
+  "controller": {
+    "ControllerSiteDescription": "The description of site in the controller (default is default)",
+    "BaseUrl": "https://unifi.example.com",
+    "UserName": "the.user", 
+    "Password" :  "[write password here]",
+    
+  },
+  "nvr": {
+    "BaseUrl": "https://nvr.example.com",
+    "UserName": "nvr.user",
+    "Password": "[write nvr password here]"
+  },
+  "presence": {
+    "PresenceIndicationMACs": [ "a0:2b:20:5f:08:1a" ],
+    "CameraIdsToSetToMotionRecordingIfNoOneIsPresent": [ "5b7dac3ee4b014ad206c0544","get the id from nvr website"]
+  }
+}
+```
+
+For those who require the use of SOCKS proxy OR use an invalid (self-signed) SSL certificate:
+```json
+{
+  "controller": {
+    "ControllerSiteDescription": "The description of site in the controller (default is default)",
+    "BaseUrl": "https://unifi.example.com",
+    "UserName": "the.user", 
+    "Password" :  "[write password here]",
+    "VerifySsl" :  false,
+    "SocksProxy" : "http://10.0.0.45:8887/"
+    
+  },
+  "nvr": {
+    "BaseUrl": "https://nvr.example.com",
+    "UserName": "nvr.user",
+    "Password": "[write nvr password here]",
+    "VerifySsl" :  false,
+    "SocksProxy" : "http://10.0.0.45:8887/"
+  },
+  "presence": {
+    "PresenceIndicationMACs": [ "a0:2b:20:5f:08:1a" ],
+    "CameraIdsToSetToMotionRecordingIfNoOneIsPresent": [ "5b7dac3ee4b014ad206c0544","get the id from nvr website"]
+  }
+}
+```
