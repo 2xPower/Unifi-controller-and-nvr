@@ -1,8 +1,11 @@
 # Unifi controller and nvr integration
+This code base is for use with products from Ubiquiti Networks. The Unifi Controller and Unifi NVR to be more precise.
+The API's used to implement needed functionality are not supported for third-party developers, like myself, so they are subject to changed without notice.
+
 
 ## Use case
 I have some camera's in my home. Those camera's should not record while family members are on premise.
-But when we are not at home, the camera's should start recording on motion events.
+But when we are not at home, the camera's should start recording motion events.
 
 ## Implementation in a nutshell
 + The client list of connected devices is retrieved from the Unifi Controller
@@ -17,6 +20,12 @@ But when we are not at home, the camera's should start recording on motion event
 
 # Deployment
 ## Download the build for your system
+Go to [releases](https://github.com/2xPower/Unifi-controller-and-nvr/releases) and download the applicable version for your OS and processor architecture.
+Builds are available for Linux x64, Linux on ARM and Windows systems.
+
+Unzip the contents of the zip file you downloaded and complete the settings.
+Personally I use the ARM version - the rest is not tested but should work.
+I use a cronjob to schedule the console app to run every 10 minutes.
 
 ## Complete the settings
 The file appsettings.json contains all the settings
