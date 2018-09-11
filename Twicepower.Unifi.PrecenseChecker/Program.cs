@@ -24,6 +24,7 @@ namespace TwicePower.Unifi.PrecenseChecker
             var presenceConfig = config.GetSection("presence").Get<PresenceRecordingSettings>();
 
             bool isPresenceDetected = IsOneOrMoreMACPresent(controllerConfig, presenceConfig).Result;
+            Console.WriteLine($"Is precense detected: {isPresenceDetected}");
             UpdateCameraRecordingState(nvrConfig, presenceConfig, isPresenceDetected).GetAwaiter().GetResult();
 
         }
@@ -38,11 +39,18 @@ namespace TwicePower.Unifi.PrecenseChecker
                 foreach (var cameraId in presenceConfig.CameraIdsToSetToMotionRecordingIfNoOneIsPresent)
                 {
                     var camera = status.Cameras.FirstOrDefault(p => p.Id == cameraId);
+                    Console.WriteLine($"Camera {camera.Name} is recording motion: {camera.RecordingSettings.MotionRecordEnabled}");
                     if (camera != null && camera.RecordingSettings?.MotionRecordEnabled != !isPresenceDetected)
                     {
+                        Console.WriteLine($"Updating camera {camera.Name}");
                         camera.RecordingSettings.MotionRecordEnabled = !isPresenceDetected;
                         await nvrClient.UpdateCamera(camera);
                     }
+                    else
+                    {
+                        Console.WriteLine($"Update for camera not required.");
+                    }
+                    Console.WriteLine();
                 }
             }
 
@@ -56,17 +64,31 @@ namespace TwicePower.Unifi.PrecenseChecker
 
             var connectedDevices = await controllerClient.GetConnectedClients(siteName);
 
-            bool presenceIndicationMacsPresent = connectedDevices.Any(a => presenceConfig.PresenceIndicationMACs.Any(b => string.Compare(b, a.Mac, StringComparison.InvariantCultureIgnoreCase) == 0));
-            return presenceIndicationMacsPresent;
+            var precenseIndicatingDevices = connectedDevices.Where(a => presenceConfig.PresenceIndicationMACs.Any(b => string.Compare(b, a.Mac, StringComparison.InvariantCultureIgnoreCase) == 0)).ToArray();
+
+            if(precenseIndicatingDevices?.Any() == true)
+            {
+                foreach (var device in precenseIndicatingDevices)
+                {
+                    Console.WriteLine($"{device.Hostname} is connected.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("None of the configured MAC are connected.");
+            }
+
+            return precenseIndicatingDevices?.Any() == true;
         }
 
         private static HttpClient GetHttpClient(string baseUrl, string socksProxy = null, bool sslVerify = true)
         {
-            SocketsHttpHandler socketsHttpHandler = new SocketsHttpHandler()
+            SocketsHttpHandler socketsHttpHandler = new SocketsHttpHandler();
+            if(!string.IsNullOrWhiteSpace(socksProxy) && Uri.IsWellFormedUriString(socksProxy, UriKind.Absolute))
             {
-                UseProxy = !string.IsNullOrWhiteSpace(socksProxy),
-                Proxy = new WebProxy(socksProxy, false)
-            };
+                socketsHttpHandler.UseProxy = true;
+                socketsHttpHandler.Proxy = new WebProxy(socksProxy, false);
+            }
 
             if (!sslVerify)
             {
