@@ -62,14 +62,15 @@ namespace TwicePower.Unifi.PrecenseChecker
 
             Console.WriteLine($"{nameof(nvrConfig)} is null: {nvrConfig == null}");
             Console.WriteLine($"{nameof(nvrConfig)} base url: {nvrConfig.BaseUrl}");
-            Console.WriteLine($"{nameof(presenceConfig)} is null: {presenceConfig == null}"); 
+            Console.WriteLine($"{nameof(presenceConfig)} is null: {presenceConfig == null}");
             #endregion
 
-            bool isPresenceDetected = IsOneOrMoreMACPresent(controllerConfig, presenceConfig).Result;
+            var currentTime = DateTime.Now.TimeOfDay;
+            bool shouldRecord = (currentTime.Hours >= 23 || currentTime.Hours < 8) || !IsOneOrMoreMACPresent(controllerConfig, presenceConfig).Result;
 
-            Console.WriteLine($"Is precense detected: {isPresenceDetected}");
+            Console.WriteLine($"Should record: {shouldRecord}");
 
-            UpdateCameraRecordingState(nvrConfig, presenceConfig, isPresenceDetected).GetAwaiter().GetResult();
+            UpdateCameraRecordingState(nvrConfig, presenceConfig, shouldRecord).GetAwaiter().GetResult();
 
         }
 
@@ -90,7 +91,6 @@ namespace TwicePower.Unifi.PrecenseChecker
                 {
                     installedPath = new Uri(installedPath.Substring(indexOfFile)).AbsolutePath;
                 }
-
             }
 
             var configFilePath = Path.Combine(installedPath, "appsettings.json");
@@ -148,7 +148,7 @@ namespace TwicePower.Unifi.PrecenseChecker
             
         }
 
-        private static async Task UpdateCameraRecordingState(NvrConfig nvrConfig,PresenceRecordingSettings presenceConfig, bool isPresenceDetected)
+        private static async Task UpdateCameraRecordingState(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig, bool shouldRecord)
         {
             var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, nvrConfig.SocksProxy, true));
 
@@ -158,16 +158,17 @@ namespace TwicePower.Unifi.PrecenseChecker
                 foreach (var cameraId in presenceConfig.CameraIdsToSetToMotionRecordingIfNoOneIsPresent)
                 {
                     var camera = status.Cameras.FirstOrDefault(p => p.Id == cameraId);
+                    var cameraDescription = $"{camera.Name} - {camera.OsdSettings.Tag}";
                     Console.WriteLine($"Camera {camera.Name} is recording motion: {camera.RecordingSettings.MotionRecordEnabled}");
-                    if (camera != null && camera.RecordingSettings?.MotionRecordEnabled != !isPresenceDetected)
+                    if (camera != null && camera.RecordingSettings?.MotionRecordEnabled != shouldRecord)
                     {
-                        Console.WriteLine($"Updating camera {camera.Name}");
-                        camera.RecordingSettings.MotionRecordEnabled = !isPresenceDetected;
+                        Console.WriteLine($"Updating camera {cameraDescription}");
+                        camera.RecordingSettings.MotionRecordEnabled = camera.EnableStatusLed = camera.LedFaceAlwaysOnWhenManaged = shouldRecord;
                         await nvrClient.UpdateCamera(camera);
                     }
                     else
                     {
-                        Console.WriteLine($"Update for camera not required.");
+                        Console.WriteLine($"Update for camera ({cameraDescription}) not required.");
                     }
                     Console.WriteLine();
                 }
