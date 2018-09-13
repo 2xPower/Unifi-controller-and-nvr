@@ -8,5 +8,8 @@ namespace TwicePower.Unifi.PrecenseChecker
     {
         public string[] PresenceIndicationMACs { get; set; }
         public string[] CameraIdsToSetToMotionRecordingIfNoOneIsPresent { get; set; }
+
+        public string SOCKS { get; set; }
+        public bool VerifySsl { get; set; } = true;
     }
 }

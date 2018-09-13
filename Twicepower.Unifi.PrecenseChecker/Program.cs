@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -14,6 +13,8 @@ namespace TwicePower.Unifi.PrecenseChecker
 {
     class Program
     {
+        internal const string configFileName = "appsettings.json";
+
         public static readonly string InstalledPath;
 
         static Program()
@@ -92,7 +93,7 @@ namespace TwicePower.Unifi.PrecenseChecker
 
             return new ConfigurationBuilder()
                     .SetBasePath(InstalledPath)
-                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+                    .AddJsonFile(configFileName, optional: true, reloadOnChange: false)
                     //.AddUserSecrets<Program>()
                     .Build();
         }

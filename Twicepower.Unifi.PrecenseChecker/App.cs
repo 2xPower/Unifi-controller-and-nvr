@@ -45,23 +45,23 @@ namespace TwicePower.Unifi.PrecenseChecker
             commandLineApplication.HelpOption("-? | -h | --help");
             var sb = new StringBuilder();
             sb.AppendLine();
-            sb.AppendLine("Without a command specification the camera's wil be updated accoring to your configuration.");
+            sb.AppendLine("Without a command specification the camera's wil be updated according to your configuration.");
             sb.AppendLine("If you have issues of feature requests please go to https://github.com/2xPower/Unifi-controller-and-nvr");
             commandLineApplication.ExtendedHelpText = sb.ToString();
 
 
             #region Config
 
-            var nvrConfig = _config.GetSection("nvr").Get<NvrConfig>() ?? new NvrConfig();
+            var nvrConfig = _config.GetSection("video").Get<NvrConfig>();
             var controllerConfig = _config.GetSection("controller").Get<ControllerConfig>();
             var presenceConfig = _config.GetSection("presence").Get<PresenceRecordingSettings>();
 
-            // configuration check
+             // configuration check
             _logger.LogDebug($"{nameof(controllerConfig)} is null: {controllerConfig == null}");
-            _logger.LogDebug($"{nameof(controllerConfig)} base url: {controllerConfig.BaseUrl}");
+            _logger.LogDebug($"{nameof(controllerConfig)} base url: {controllerConfig?.BaseUrl}");
 
             _logger.LogDebug($"{nameof(nvrConfig)} is null: {nvrConfig == null}");
-            _logger.LogDebug($"{nameof(nvrConfig)} base url: {nvrConfig.BaseUrl}");
+            _logger.LogDebug($"{nameof(nvrConfig)} base url: {nvrConfig?.BaseUrl}");
             _logger.LogDebug($"{nameof(presenceConfig)} is null: {presenceConfig == null}");
 
             if(controllerConfig == null)
@@ -81,16 +81,13 @@ namespace TwicePower.Unifi.PrecenseChecker
             }
             #endregion
 
-            MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
-            MergeConfig(nvrConfig, userNameNvr, passWordNvr, baseUrlNvr);
-
 
             commandLineApplication.Command("list-clients",
               (target) =>
               {
                   target.OnExecute(async () =>
                   {
-                      await OutputConnectedClientsToConsole(controllerConfig);
+                      await OutputConnectedClientsToConsole(controllerConfig, presenceConfig);
                   });
               });
 
@@ -99,26 +96,108 @@ namespace TwicePower.Unifi.PrecenseChecker
               {
                   target.OnExecute(async () =>
                   {
-                      await OutputConnectedCamerasToConsole(nvrConfig);
+                      await OutputConnectedCamerasToConsole(nvrConfig, presenceConfig);
                   });
               });
 
-            commandLineApplication.OnExecute(async () =>
+            commandLineApplication.Command("config",
+                  (target) =>
+                  {
+                      target.OnExecute(async () =>
+                      {
+                          Console.WriteLine("Configuration".ToUpper());
+                          Console.WriteLine("-------------");
+
+                          Console.WriteLine("[General]");
+                          if(Prompt.GetYesNo("Use SOCKS proxy for connection to Unifi: ", false))
+                          {
+                              presenceConfig.SOCKS = Prompt.GetString("Input the url for proxy (eg. http://localhost:8888");
+                          }
+                          presenceConfig.VerifySsl = Prompt.GetYesNo("Verify SSL certificate when connecting to unifi: ", true);
+                          Console.WriteLine();
+                          Console.WriteLine("[Unifi Controller settings]");
+                          optionBaseUrlController.Values.Insert(0, Prompt.GetString("Unifi controller URL: "));
+                          optionSitename.Values.Insert(0, Prompt.GetString("Sitename (if other then default): ", "default"));
+                          optionUserNameController.Values.Insert(0, Prompt.GetString("Username: "));
+                          optionPassWordController.Values.Insert(0, Prompt.GetPassword("Password: "));
+                          MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
+                          Console.WriteLine("Testing configuration for Unifi Controller");
+                          var connectedClients = await GetConnectedClients(controllerConfig, presenceConfig);
+                          WriteConnectedClientsToConsole(connectedClients);
+
+                          var clientIndexes = Prompt.GetString("Comma seperated list of client Index number (eg: 2,15,7): ").Split(",", StringSplitOptions.RemoveEmptyEntries);
+                          var clientList = new List<Sta>();
+                          foreach (var index in clientIndexes)
+                          {
+                              clientList.Add(connectedClients[int.Parse(index)]);
+                          }
+                          presenceConfig.PresenceIndicationMACs = clientList.Select(s => s.Mac).ToArray();
+
+                          Console.WriteLine();
+                          Console.WriteLine("[Unifi Controller settings]");
+                          baseUrlNvr.Values.Insert(0, Prompt.GetString("Unifi Video URL: "));
+                          userNameNvr.Values.Insert(0, Prompt.GetString("Username: "));
+                          passWordNvr.Values.Insert(0, Prompt.GetPassword("Password: "));
+                          MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
+                          Console.WriteLine("Testing configuration for Unifi Video");
+                          MergeConfig(nvrConfig, userNameNvr, passWordNvr, baseUrlNvr);
+                          var status = await GetNvrStatus(nvrConfig, presenceConfig);
+                          WriteNvrStatusToConsole(status);
+
+                          clientIndexes = Prompt.GetString("Comma seperated list of camera index number (eg: 2,15,7) for wich recording mode should be managed: ").Split(",", StringSplitOptions.RemoveEmptyEntries);
+                          var cameraList = new List<Camera>();
+                          foreach (var index in clientIndexes)
+                          {
+                              cameraList.Add(status.Cameras[int.Parse(index)]);
+                          }
+
+                          presenceConfig.CameraIdsToSetToMotionRecordingIfNoOneIsPresent = cameraList.Select(s => s.Id).ToArray();
+
+                          var configString = Newtonsoft.Json.JsonConvert.SerializeObject(new { video = nvrConfig, controller = controllerConfig, presence = presenceConfig });
+
+                          Console.WriteLine();
+                          Console.WriteLine("New configuration:");
+                          Console.WriteLine();
+                          Console.WriteLine(configString);
+
+                          if (Prompt.GetYesNo("Write this configuration to appsettings.json?: ", true))
+                          {
+                              System.IO.File.WriteAllBytes(System.IO.Path.Combine(Program.InstalledPath, Program.configFileName), Encoding.UTF8.GetBytes(configString));
+                          }
+
+                      });
+                  });
+
+            commandLineApplication.Command("update", (target) => 
             {
-                var currentTime = DateTime.Now.TimeOfDay;
-                bool shouldRecord = (currentTime.Hours >= 23 || currentTime.Hours < 8) || !IsOneOrMoreMACPresent(await GetConnectedClients(controllerConfig), presenceConfig);
-
-                _logger.LogInformation($"Should record: {shouldRecord}");
-                var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, nvrConfig.SocksProxy, nvrConfig.VerifySsl));
-                var status = await GetNvrStatus(nvrClient, nvrConfig);
-                if (status != null)
+                target.OnExecute(async () => 
                 {
-                    UpdateCameraRecordingState(nvrClient, status, presenceConfig, shouldRecord).GetAwaiter().GetResult();
-                }
+                    var currentTime = DateTime.Now.TimeOfDay;
+                    bool shouldRecord = (currentTime.Hours >= 23 || currentTime.Hours < 8) || !IsOneOrMoreMACPresent(await GetConnectedClients(controllerConfig, presenceConfig), presenceConfig);
 
+                    _logger.LogInformation($"Should record: {shouldRecord}");
+                    var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, presenceConfig.SOCKS, presenceConfig.VerifySsl));
+                    var status = await GetNvrStatus(nvrClient, nvrConfig);
+                    if (status != null)
+                    {
+                        UpdateCameraRecordingState(nvrClient, status, presenceConfig, shouldRecord).GetAwaiter().GetResult();
+                    }
+                    return 0;
+                });
+            });
 
+            commandLineApplication.OnExecute(() =>
+            {
+                commandLineApplication.ShowHelp();
                 return 0;
             });
+
+            commandLineApplication.Parse(args);
+
+            MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
+            MergeConfig(nvrConfig, userNameNvr, passWordNvr, baseUrlNvr);
+
+
             commandLineApplication.Execute(args);
 
             return 0;
@@ -160,37 +239,56 @@ namespace TwicePower.Unifi.PrecenseChecker
             }
         }
 
-        private async Task OutputConnectedCamerasToConsole(NvrConfig nvrConfig)
+        private async Task OutputConnectedCamerasToConsole(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig)
         {
-            var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, nvrConfig.SocksProxy, nvrConfig.VerifySsl));
-            var status = await GetNvrStatus(nvrClient, nvrConfig);
+            Status status = await GetNvrStatus(nvrConfig, presenceConfig);
             if (status != null)
             {
-                string tableHeader = $"{"Name and OSD tag".PadRight(30, ' ')} {"ID".PadRight(30, ' ')}{"State".PadRight(20, ' ')} Record on motion";
-                Console.WriteLine();
-                Console.WriteLine(tableHeader);
-                Console.WriteLine("".PadRight(tableHeader.Length, '_'));
-                foreach (var camera in status.Cameras)
-                {
-                    var description = GetCameraDescription(camera);
-                    Console.WriteLine($"{description.PadRight(30, ' ')} {camera.Id.PadRight(30, ' ')}{camera.State.PadRight(20, ' ')} {camera.RecordingSettings.MotionRecordEnabled}");
-                }
+                WriteNvrStatusToConsole(status);
             }
         }
 
-        private async Task OutputConnectedClientsToConsole(ControllerConfig controllerConfig)
+        private async Task<Status> GetNvrStatus(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig)
         {
-            var connectedClients = await GetConnectedClients(controllerConfig);
+            var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, presenceConfig.SOCKS, presenceConfig.VerifySsl));
+            var status = await GetNvrStatus(nvrClient, nvrConfig);
+            return status;
+        }
+
+        private void WriteNvrStatusToConsole(Status status)
+        {
+            string tableHeader = $"Index {"Name and OSD tag".PadRight(30, ' ')} {"ID".PadRight(30, ' ')}{"State".PadRight(20, ' ')} Record on motion";
+            Console.WriteLine();
+            Console.WriteLine(tableHeader);
+            Console.WriteLine("".PadRight(tableHeader.Length, '_'));
+            for (int i = 0; i < status.Cameras.Length; i++)
+            {
+                var camera = status.Cameras[i];
+                var description = GetCameraDescription(camera);
+                Console.WriteLine($"{i.ToString().PadRight(6)}{description.PadRight(30, ' ')} {camera.Id.PadRight(30, ' ')}{camera.State.PadRight(20, ' ')} {camera.RecordingSettings.MotionRecordEnabled}");
+            }
+        }
+
+        private async Task OutputConnectedClientsToConsole(ControllerConfig controllerConfig, PresenceRecordingSettings presenceConfig)
+        {
+            var connectedClients = await GetConnectedClients(controllerConfig, presenceConfig);
             if (connectedClients?.Any() == true)
             {
-                string tableHeader = $"{"MAC".PadRight(20, ' ')} {"Host name".PadRight(30, ' ')}Idle time";
-                Console.WriteLine();
-                Console.WriteLine(tableHeader);
-                Console.WriteLine("".PadRight(tableHeader.Length, '_'));
-                foreach (var client in connectedClients.Where(client => client.IsWired == false).ToArray())
-                {
-                    Console.WriteLine($"{client.Mac.PadRight(20, ' ')} {client.Hostname ?? "".PadRight(30, ' ')}{client.Idletime}");
-                }
+                WriteConnectedClientsToConsole(connectedClients);
+            }
+        }
+
+        private static void WriteConnectedClientsToConsole(Sta[] connectedClients)
+        {
+            string tableHeader = $"Index {"MAC".PadRight(20, ' ')} {"Host name".PadRight(30, ' ')}Idle time";
+            Console.WriteLine();
+            Console.WriteLine(tableHeader);
+            Console.WriteLine("".PadRight(tableHeader.Length, '_'));
+            var wireLessClients = connectedClients.Where(client => client.IsWired == false).ToArray();
+            for (int i = 0; i < wireLessClients.Length; i++)
+            {
+                var client = wireLessClients[i];
+                Console.WriteLine($"{i.ToString().PadRight(6)}{client.Mac.PadRight(20, ' ')} {client.Hostname ?? "".PadRight(30, ' ')}{client.Idletime}");
             }
         }
 
@@ -220,9 +318,9 @@ namespace TwicePower.Unifi.PrecenseChecker
             }
         }
 
-        private async Task<Sta[]> GetConnectedClients(ControllerConfig controllerConfig)
+        private async Task<Sta[]> GetConnectedClients(ControllerConfig controllerConfig, PresenceRecordingSettings presenceConfig)
         {
-            var controllerClient = new UnifiControllerClient(GetHttpClient(controllerConfig.BaseUrl, controllerConfig.SocksProxy, controllerConfig.VerifySsl));
+            var controllerClient = new UnifiControllerClient(GetHttpClient(controllerConfig.BaseUrl, presenceConfig.SOCKS, presenceConfig.VerifySsl));
 
             var loginResult = await controllerClient.Login(controllerConfig.UserName, controllerConfig.Password);
             if (loginResult == true)
