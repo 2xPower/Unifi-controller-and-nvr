@@ -212,13 +212,14 @@ namespace TwicePower.Unifi.PrecenseChecker
         {
             Console.WriteLine("Testing configuration for Unifi Controller");
             var connectedClients = await GetConnectedClients(controllerConfig, presenceConfig, logger);
-            WriteConnectedClientsToConsole(connectedClients);
+            var wireLessClients = connectedClients.Where(client => client.IsWired == false).ToArray();
+            WriteConnectedClientsToConsole(wireLessClients);
 
             var clientIndexes = Prompt.GetString("Comma seperated list of client Index number (eg: 2,15,7): ").Split(",", StringSplitOptions.RemoveEmptyEntries);
             var clientList = new List<Sta>();
             foreach (var index in clientIndexes)
             {
-                clientList.Add(connectedClients[int.Parse(index)]);
+                clientList.Add(wireLessClients[int.Parse(index)]);
             }
             presenceConfig.PresenceIndicationMACs = clientList.Select(s => s.Mac).ToArray();
             Console.WriteLine();
@@ -334,10 +335,9 @@ namespace TwicePower.Unifi.PrecenseChecker
             Console.WriteLine();
             Console.WriteLine(tableHeader);
             Console.WriteLine("".PadRight(tableHeader.Length, '_'));
-            var wireLessClients = connectedClients.Where(client => client.IsWired == false).ToArray();
-            for (int i = 0; i < wireLessClients.Length; i++)
+            for (int i = 0; i < connectedClients.Length; i++)
             {
-                var client = wireLessClients[i];
+                var client = connectedClients[i];
                 Console.WriteLine($"{i.ToString().PadRight(6)}{client.Mac.PadRight(20, ' ')} {(client.Hostname ?? "").PadRight(30, ' ')}{client.Idletime}");
             }
         }

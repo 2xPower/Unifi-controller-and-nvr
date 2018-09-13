@@ -61,13 +61,12 @@ namespace TwicePower.Unifi.PrecenseChecker
             // Add logging
             serviceCollection.AddSingleton<ILoggerFactory>(new LoggerFactory()
                 .AddConsole()
-                .AddSerilog()
-                .AddDebug());
+                .AddSerilog());
             serviceCollection.AddLogging();
             
             // Initialize serilog logger
             Log.Logger = new LoggerConfiguration()
-                 .WriteTo.RollingFile($"{Path.Combine(InstalledPath, typeof(Program).Namespace)}.-{{Date}}.log", Serilog.Events.LogEventLevel.Debug)
+                 .WriteTo.RollingFile($"{Path.Combine(InstalledPath, "tup")}.-{{Date}}.log", Serilog.Events.LogEventLevel.Debug)
                  .MinimumLevel.Debug()
                  .Enrich.FromLogContext()
                  .CreateLogger();
@@ -86,15 +85,11 @@ namespace TwicePower.Unifi.PrecenseChecker
             
             var configFilePath = Path.Combine(InstalledPath, "appsettings.json");
 
-           serviceProvider.GetService<Microsoft.Extensions.Logging.ILogger>().LogInformation($"using config at {configFilePath}");
-
-            //if (!File.Exists(configFilePath))
-            //    throw new Exception("appsettings.json not found");
+            serviceProvider.GetService<Microsoft.Extensions.Logging.ILogger>().LogInformation($"using config at {configFilePath}");
 
             return new ConfigurationBuilder()
                     .SetBasePath(InstalledPath)
                     .AddJsonFile(configFileName, optional: true, reloadOnChange: false)
-                    //.AddUserSecrets<Program>()
                     .Build();
         }
 
