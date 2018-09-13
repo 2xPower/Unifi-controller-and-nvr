@@ -2,7 +2,7 @@
   "profiles": {
     "TwicePower.Unifi.PrecenseChecker": {
       "commandName": "Project",
-      "commandLineArgs": "--help"
+      "commandLineArgs": "-uc simon.smeets -pc StrategyB4Action -urlc https://home.twicepower.com -urlv https://nvr.twicepower.com -s Holstraat"
     }
   }
 }
