@@ -27,13 +27,10 @@ namespace TwicePower.Unifi.PrecenseChecker
         public async Task<int> Run(string[] args)
         {
             CommandLineApplication commandLineApplication = new CommandLineApplication(throwOnUnexpectedArg: false);
-
-
-            var linesplit = $"{Environment.NewLine}\t\t\t\t\t ";
             CommandOption optionUserNameController = commandLineApplication.Option("-uc |--username-controller <username>",
-                $"The user name  for unifi controller. If username-nvr is not specified,{linesplit}this value will be used for controller and nvr.{linesplit}If not for the controller only", CommandOptionType.SingleValue);
+                $"The user name  for unifi controller.", CommandOptionType.SingleValue);
             CommandOption optionPassWordController = commandLineApplication.Option("-pc |--password-controller <password>",
-               $"The password for unifi controller. If password-nvr  is not specified,{linesplit}this value will be used for controller and nvr.{linesplit}If not for the controller only", CommandOptionType.SingleValue);
+               $"The password for unifi controller.", CommandOptionType.SingleValue);
             CommandOption optionBaseUrlController = commandLineApplication.Option("-urlc | --url-controller <url>",
                $"The url for the Unifi Controller.", CommandOptionType.SingleValue);
             CommandOption optionSitename = commandLineApplication.Option("-s | --site-description <sitedescription>",
@@ -82,10 +79,10 @@ namespace TwicePower.Unifi.PrecenseChecker
                 _logger.LogWarning("Failed to load presence configuration information from config file.");
                 presenceConfig = new PresenceRecordingSettings();
             }
-            MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
             #endregion
 
-
+            MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
+            MergeConfig(nvrConfig, userNameNvr, passWordNvr, baseUrlNvr);
 
 
             commandLineApplication.Command("list-clients",
@@ -125,6 +122,22 @@ namespace TwicePower.Unifi.PrecenseChecker
             commandLineApplication.Execute(args);
 
             return 0;
+        }
+
+        private void MergeConfig(NvrConfig nvrConfig, CommandOption userNameNvr, CommandOption passWordNvr, CommandOption baseUrlNvr)
+        {
+            if (userNameNvr?.HasValue() == true)
+            {
+                nvrConfig.UserName = userNameNvr.Value();
+            }
+            if (passWordNvr?.HasValue() == true)
+            {
+                nvrConfig.Password = passWordNvr.Value();
+            }
+            if (baseUrlNvr?.HasValue() == true)
+            {
+                nvrConfig.BaseUrl = baseUrlNvr.Value();
+            }
         }
 
         private void MergeConfig(ControllerConfig controllerConfig, CommandOption optionSitename, CommandOption optionUserNameController, CommandOption optionPassWordController, CommandOption optionBaseUrlController)
