@@ -24,7 +24,7 @@ Go to [releases](https://github.com/2xPower/Unifi-controller-and-nvr/releases) a
 Builds are available for Linux x64, Linux on ARM and Windows systems.
 
 Unzip the contents of the zip file you downloaded and complete the settings.
-I use a cronjob to schedule the application to run every 10 minutes on a Raspberry Pi 2 (linux-arm).
+
 
 ## Complete the settings
 The file appsettings.json contains all the settings
@@ -44,7 +44,7 @@ The file appsettings.json contains all the settings
     "Password": "[write nvr password here]"
   },
   "presence": {
-    "PresenceIndicationMACs": [ "a0:2b:20:5f:08:1a" ],
+    "PresenceIndicationMACs": [ "a0:2b:20:5f:08:1a", "input mac address for phone here" ],
     "CameraIdsToSetToMotionRecordingIfNoOneIsPresent": [ "5b7dac3ee4b014ad206c0544","get the id from nvr website"]
   }
 }
@@ -74,4 +74,15 @@ For those who require the use of SOCKS proxy OR use an invalid (self-signed) SSL
     "CameraIdsToSetToMotionRecordingIfNoOneIsPresent": [ "5b7dac3ee4b014ad206c0544","get the id from nvr website"]
   }
 }
+```
+## Run the application
+
+### Windows
+execute TwicePower.Unifi.PrecenseChecker.exe
+
+### Linux
+execute ./TwicePower.Unifi.PrecenseChecker
+I use a cronjob to schedule the application to run every 5 minutes on a Raspberry Pi 2 (linux-arm).
+```crontab -e
+*/5 * * * * /mnt/simon@nashome/unifipresenceupdater/TwicePower.Unifi.PrecenseChecker >> /mnt/simon@nashome/unifipresenceupdater/TwicePower.Unifi.PrecenseChecker.log
 ```

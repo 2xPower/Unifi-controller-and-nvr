@@ -1,6 +1,8 @@
-﻿using Microsoft.Extensions.CommandLineUtils;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using System;
 using System.IO;
 using System.Linq;
@@ -12,70 +14,11 @@ namespace TwicePower.Unifi.PrecenseChecker
 {
     class Program
     {
-        public static void Main(string[] args)
+        public static readonly string InstalledPath;
+
+        static Program()
         {
-            CommandLineApplication commandLineApplication = new CommandLineApplication(throwOnUnexpectedArg: false);
-            CommandArgument names = null;
-            var linesplit = $"{Environment.NewLine}\t\t\t\t\t ";
-            commandLineApplication.Command("list-clients",
-              (target) =>
-                names = target. Argument(
-                  "list connected wireless clients",
-                  "Enter the full name of the person to be greeted.")); 
-
-            CommandOption userNameController = commandLineApplication.Option("-uc |--username-controller <username>",
-                $"The user name  for unifi controller. If username-nvr is not specified,{linesplit}this value will be used for controller and nvr.{linesplit}If not for the controller only", CommandOptionType.SingleValue);
-            CommandOption passWordController = commandLineApplication.Option("-pc |--password-controller <password>",
-               $"The password for unifi controller. If password-nvr  is not specified,{linesplit}this value will be used for controller and nvr.{linesplit}If not for the controller only", CommandOptionType.SingleValue);
-            CommandOption baseUrlController = commandLineApplication.Option("-urlc | --url-controller <url>",
-               $"The url for the Unif Controller.", CommandOptionType.SingleValue);
-
-            CommandOption userNameNvr = commandLineApplication.Option("-un | --username-nvr <username>",
-               "The user name  for unifi Nvr.", CommandOptionType.SingleValue);
-            CommandOption passWordNvr = commandLineApplication.Option("-pn | --password-nvr <password>",
-               "The password for unifi controller.", CommandOptionType.SingleValue);
-            CommandOption baseUrlNvr = commandLineApplication.Option("-urln | --url-nvr <url>",
-               "The url for the Ubiquity Video - NVR.", CommandOptionType.SingleValue);
-
-
-
-            commandLineApplication.HelpOption("-? | -h | --help");
-            commandLineApplication.OnExecute(() =>
-            {
-                if (userNameController.HasValue())
-                {
-
-                }
-                return 0;
-            });
-            commandLineApplication.Execute(args);
-            #region Config
-            IConfigurationRoot config = LoadConfigurationFromFile();
-
-            var nvrConfig = config.GetSection("nvr").Get<NvrConfig>();
-            var controllerConfig = config.GetSection("controller").Get<ControllerConfig>();
-            var presenceConfig = config.GetSection("presence").Get<PresenceRecordingSettings>();
-
-            // configuration check
-            Console.WriteLine($"{nameof(controllerConfig)} is null: {controllerConfig == null}");
-            Console.WriteLine($"{nameof(controllerConfig)} base url: {controllerConfig.BaseUrl}");
-
-            Console.WriteLine($"{nameof(nvrConfig)} is null: {nvrConfig == null}");
-            Console.WriteLine($"{nameof(nvrConfig)} base url: {nvrConfig.BaseUrl}");
-            Console.WriteLine($"{nameof(presenceConfig)} is null: {presenceConfig == null}");
-            #endregion
-
-            var currentTime = DateTime.Now.TimeOfDay;
-            bool shouldRecord = (currentTime.Hours >= 23 || currentTime.Hours < 8) || !IsOneOrMoreMACPresent(controllerConfig, presenceConfig).Result;
-
-            Console.WriteLine($"Should record: {shouldRecord}");
-
-            UpdateCameraRecordingState(nvrConfig, presenceConfig, shouldRecord).GetAwaiter().GetResult();
-
-        }
-
-        private static IConfigurationRoot LoadConfigurationFromFile()
-        {
+            // Build configuration
             var installedPath = new FileInfo(typeof(Program).Assembly.CodeBase).Directory.FullName;
             if (Environment.OSVersion.Platform == PlatformID.Unix)
             {
@@ -86,131 +29,74 @@ namespace TwicePower.Unifi.PrecenseChecker
             }
             else
             {
-                var indexOfFile = installedPath.IndexOf("file:");
+                var indexOfFile = installedPath.IndexOf("file:", StringComparison.InvariantCultureIgnoreCase);
                 if (indexOfFile > 0)
                 {
                     installedPath = new Uri(installedPath.Substring(indexOfFile)).AbsolutePath;
                 }
             }
 
-            var configFilePath = Path.Combine(installedPath, "appsettings.json");
-
-            Console.WriteLine($"using config at {configFilePath}");
-            if (!File.Exists(configFilePath))
-                throw new Exception("appsettings.json not found");
-
-            var config = new ConfigurationBuilder()
-                    .SetBasePath(installedPath)
-                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-                    .AddUserSecrets<Program>()
-                    .Build();
-            return config;
+            InstalledPath = installedPath;
         }
 
-        private static async Task<bool> IsOneOrMoreMACPresent(ControllerConfig controllerConfig, PresenceRecordingSettings presenceConfig)
+        public static int Main(string[] args)
         {
-            var controllerClient = new UnifiControllerClient(GetHttpClient(controllerConfig.BaseUrl, controllerConfig.SocksProxy, controllerConfig.VerifySsl));
+            // Create service collection
+            var serviceCollection = new ServiceCollection();
+            ConfigureServices(serviceCollection);
 
-            var loginResult = await controllerClient.Login(controllerConfig.UserName, controllerConfig.Password);
-            if (loginResult == true)
-            {
-                var siteName = controllerClient.GetSites().Result.First(p => string.Compare(controllerConfig.ControllerSiteDescription, p.Desc, StringComparison.InvariantCultureIgnoreCase) == 0).Name;
+            // Create service provider
+            var serviceProvider = serviceCollection.BuildServiceProvider();
 
-                var connectedDevices = await controllerClient.GetConnectedClients(siteName);
-                if (connectedDevices?.Count() > 0)
-                {
+            // Run app
+            return serviceProvider.GetService<App>().Run(args).Result;
 
-                    var precenseIndicatingDevices = connectedDevices.Where(a => presenceConfig.PresenceIndicationMACs.Any(b => string.Compare(b, a.Mac, StringComparison.InvariantCultureIgnoreCase) == 0)).ToArray();
 
-                    if (precenseIndicatingDevices?.Any() == true)
-                    {
-                        foreach (var device in precenseIndicatingDevices)
-                        {
-                            Console.WriteLine($"{device.Hostname} is connected.");
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("None of the configured MAC are connected.");
-                    }
-                    return precenseIndicatingDevices?.Any() == true;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                throw new Exception("Failed to log on to the controller");
-            }
+        }
 
+
+        private static void ConfigureServices(IServiceCollection serviceCollection)
+        {
+            // Add logging
+            serviceCollection.AddSingleton<ILoggerFactory>(new LoggerFactory()
+                .AddConsole()
+                .AddSerilog()
+                .AddDebug());
+            serviceCollection.AddLogging();
             
+            // Initialize serilog logger
+            Log.Logger = new LoggerConfiguration()
+                 .WriteTo.RollingFile($"{Path.Combine(InstalledPath, typeof(Program).Namespace)}.-{{Date}}.log", Serilog.Events.LogEventLevel.Debug)
+                 .MinimumLevel.Debug()
+                 .Enrich.FromLogContext()
+                 .CreateLogger();
+
+            serviceCollection.AddTransient<Microsoft.Extensions.Logging.ILogger>((provider) => { return provider.GetService<ILoggerFactory>().CreateLogger("console app"); });
+
+            // Add access to generic IConfigurationRoot
+            serviceCollection.AddSingleton(typeof(IConfigurationRoot), (serviceProvider) => { return GetConfigFromFile(serviceProvider); });
+
+            // Add app
+            serviceCollection.AddTransient<App, App>();
         }
 
-        private static async Task UpdateCameraRecordingState(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig, bool shouldRecord)
+        private static IConfigurationRoot GetConfigFromFile(IServiceProvider serviceProvider)
         {
-            var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, nvrConfig.SocksProxy, true));
+            
+            var configFilePath = Path.Combine(InstalledPath, "appsettings.json");
 
-            if (await nvrClient.Login(nvrConfig.UserName, nvrConfig.Password))
-            {
-                var status = await nvrClient.GetStatus();
-                foreach (var cameraId in presenceConfig.CameraIdsToSetToMotionRecordingIfNoOneIsPresent)
-                {
-                    var camera = status.Cameras.FirstOrDefault(p => p.Id == cameraId);
-                    var cameraDescription = $"{camera.Name} - {camera.OsdSettings.Tag}";
-                    Console.WriteLine($"Camera {camera.Name} is recording motion: {camera.RecordingSettings.MotionRecordEnabled}");
-                    if (camera != null && camera.RecordingSettings?.MotionRecordEnabled != shouldRecord)
-                    {
-                        Console.WriteLine($"Updating camera {cameraDescription}");
-                        camera.RecordingSettings.MotionRecordEnabled = camera.EnableStatusLed = camera.LedFaceAlwaysOnWhenManaged = shouldRecord;
-                        await nvrClient.UpdateCamera(camera);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Update for camera ({cameraDescription}) not required.");
-                    }
-                    Console.WriteLine();
-                }
-            }
-            else
-            {
-                Console.WriteLine("Failed to log in to NVR");
-            }
+           serviceProvider.GetService<Microsoft.Extensions.Logging.ILogger>().LogInformation($"using config at {configFilePath}");
 
+            //if (!File.Exists(configFilePath))
+            //    throw new Exception("appsettings.json not found");
+
+            return new ConfigurationBuilder()
+                    .SetBasePath(InstalledPath)
+                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+                    //.AddUserSecrets<Program>()
+                    .Build();
         }
 
-        private static HttpClient GetHttpClient(string baseUrl, string socksProxy = null, bool sslVerify = true)
-        {
-            SocketsHttpHandler socketsHttpHandler = new SocketsHttpHandler();
-            if(!string.IsNullOrWhiteSpace(socksProxy) && Uri.IsWellFormedUriString(socksProxy, UriKind.Absolute))
-            {
-                socketsHttpHandler.UseProxy = true;
-                socketsHttpHandler.Proxy = new WebProxy(socksProxy, false);
-            }
 
-            if (!sslVerify)
-            {
-                ServicePointManager.ServerCertificateValidationCallback = (a, b, c, d) => true;
-                socketsHttpHandler.SslOptions.RemoteCertificateValidationCallback += (a, b, c, d) =>
-                {
-                    return true;
-                };
-            }
-            HttpClient httpClient = new HttpClient(socketsHttpHandler)
-            {
-                BaseAddress = new Uri(baseUrl)
-            };
-
-            httpClient.DefaultRequestHeaders.Clear();
-            httpClient.DefaultRequestHeaders.Add("Accept-Encoding", "deflate");
-            httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/plain, */*");
-            httpClient.DefaultRequestHeaders.Add("Cache-Control", "no-cache");
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "Twicepower-Unifi-Client");
-
-        
-
-            return httpClient;
-        }
     }
 }
