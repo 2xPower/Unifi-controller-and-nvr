@@ -11,5 +11,6 @@ namespace TwicePower.Unifi.PrecenseChecker
 
         public string SOCKS { get; set; }
         public bool VerifySsl { get; set; } = true;
+        public bool EnableNightRecordingIfAtHome { get; internal set; }
     }
 }

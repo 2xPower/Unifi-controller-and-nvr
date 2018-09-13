@@ -153,7 +153,7 @@ namespace TwicePower.Unifi.PrecenseChecker
                 target.OnExecute(async () => 
                 {
                     var currentTime = DateTime.Now.TimeOfDay;
-                    bool shouldRecord = (currentTime.Hours >= 23 || currentTime.Hours < 8) || !IsOneOrMoreMACPresent(await GetConnectedClients(controllerConfig, presenceConfig, _logger), presenceConfig);
+                    bool shouldRecord = (presenceConfig.EnableNightRecordingIfAtHome && (currentTime.Hours >= 23 || currentTime.Hours < 8)) || !IsOneOrMoreMACPresent(await GetConnectedClients(controllerConfig, presenceConfig, _logger), presenceConfig);
 
                     _logger.LogInformation($"Should record: {shouldRecord}");
                     var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, presenceConfig.SOCKS, presenceConfig.VerifySsl));
@@ -243,6 +243,7 @@ namespace TwicePower.Unifi.PrecenseChecker
                 presenceConfig.SOCKS = Prompt.GetString("Input the url for proxy (eg. http://localhost:8888");
             }
             presenceConfig.VerifySsl = Prompt.GetYesNo("Verify SSL certificate when connecting to unifi: ", true);
+            presenceConfig.EnableNightRecordingIfAtHome = Prompt.GetYesNo("Would you like to record motion at night (23h-8h) even if someone is at home? ", presenceConfig.EnableNightRecordingIfAtHome);
             Console.WriteLine();
         }
 
