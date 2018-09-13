@@ -1,5 +1,5 @@
 # Unifi controller and nvr integration
-This code base is for use with products from Ubiquiti Networks. The Unifi Controller and Unifi NVR to be more precise.
+This application is for use with products from Ubiquiti Networks. The Unifi Controller and Unifi NVR to be more precise.
 The API's used to implement needed functionality are not supported for third-party developers, like myself, so they are subject to changed without notice.
 
 ## Use case
