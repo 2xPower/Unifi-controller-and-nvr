@@ -72,7 +72,7 @@ namespace TwicePower.Unifi.PrecenseChecker
                  .Enrich.FromLogContext()
                  .CreateLogger();
 
-            serviceCollection.AddTransient<Microsoft.Extensions.Logging.ILogger>((provider) => { return provider.GetService<ILoggerFactory>().CreateLogger("console app"); });
+            serviceCollection.AddTransient<Microsoft.Extensions.Logging.ILogger>((provider) => { return provider.GetService<ILoggerFactory>().CreateLogger<App>(); });
 
             // Add access to generic IConfigurationRoot
             serviceCollection.AddSingleton(typeof(IConfigurationRoot), (serviceProvider) => { return GetConfigFromFile(serviceProvider); });
