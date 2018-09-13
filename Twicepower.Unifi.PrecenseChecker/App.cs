@@ -47,7 +47,7 @@ namespace TwicePower.Unifi.PrecenseChecker
             commandLineApplication.HelpOption(helpoptions);
             var sb = new StringBuilder();
             sb.AppendLine();
-            sb.AppendLine("When using any of the command line options for configuration configuration, these values are used instead of the values from appsettings.json");
+            sb.AppendLine("When using any of the command line options for configuration, these values are used instead of the values from appsettings.json");
             sb.AppendLine("If you have issues of feature requests please go to https://github.com/2xPower/Unifi-controller-and-nvr");
             commandLineApplication.ExtendedHelpText = sb.ToString();
 
@@ -97,7 +97,7 @@ namespace TwicePower.Unifi.PrecenseChecker
                     target.Command("cameras", (listCameraCommand) => 
                     {
                         listCameraCommand.Description = "Shows the list of camera's managed by the configured Unifi NVR";
-                        listCameraCommand.OnExecute(async () => { await OutputConnectedCamerasToConsole(nvrConfig, presenceConfig); });
+                        listCameraCommand.OnExecute(async () => { await OutputConnectedCamerasToConsole(nvrConfig, presenceConfig, _logger); });
                     });
 
                     target.OnExecute( () => 
@@ -115,17 +115,21 @@ namespace TwicePower.Unifi.PrecenseChecker
                       target.Description = "Starts the user prompts to create or update the configuration stored in appsettings.json";
                       target.OnExecute(async () =>
                       {
+                          Console.WriteLine();
+                          Console.WriteLine("-------------");
                           Console.WriteLine("Configuration".ToUpper());
                           Console.WriteLine("-------------");
+                          Console.WriteLine("Press Enter to leave current value unchaged");
+                          Console.WriteLine();
 
                           SetGeneralConfig(presenceConfig);
                           SetControllerConfig(optionUserNameController, optionPassWordController, optionBaseUrlController, optionSitename, controllerConfig);
 
                           await UpdateConfigDevices(controllerConfig, presenceConfig, _logger);
 
-                          UpdateConfigUnifiVideo(optionUserNameController, optionPassWordController, optionBaseUrlController, optionSitename, userNameNvr, passWordNvr, baseUrlNvr, nvrConfig, controllerConfig);
+                          UpdateConfigUnifiVideo(userNameNvr, passWordNvr, baseUrlNvr, nvrConfig);
 
-                          await UpdateConfigCameras(nvrConfig, presenceConfig);
+                          await UpdateConfigCameras(nvrConfig, presenceConfig, _logger);
 
                           var configString = Newtonsoft.Json.JsonConvert.SerializeObject(new { video = nvrConfig, controller = controllerConfig, presence = presenceConfig });
 
@@ -178,10 +182,10 @@ namespace TwicePower.Unifi.PrecenseChecker
             return 0;
         }
 
-        private static async Task UpdateConfigCameras(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig)
+        private static async Task UpdateConfigCameras(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig, ILogger logger)
         {
             Console.WriteLine("Testing configuration for Unifi Video");
-            var status = await GetNvrStatus(nvrConfig, presenceConfig);
+            var status = await GetNvrStatus(nvrConfig, presenceConfig, logger);
             WriteNvrStatusToConsole(status);
 
             var camIndexes = Prompt.GetString("Comma seperated list of camera index number (eg: 2,15,7) for wich recording mode should be managed: ").Split(",", StringSplitOptions.RemoveEmptyEntries);
@@ -194,13 +198,12 @@ namespace TwicePower.Unifi.PrecenseChecker
             presenceConfig.CameraIdsToSetToMotionRecordingIfNoOneIsPresent = cameraList.Select(s => s.Id).ToArray();
         }
 
-        private static void UpdateConfigUnifiVideo(CommandOption optionUserNameController, CommandOption optionPassWordController, CommandOption optionBaseUrlController, CommandOption optionSitename, CommandOption userNameNvr, CommandOption passWordNvr, CommandOption baseUrlNvr, NvrConfig nvrConfig, ControllerConfig controllerConfig)
+        private static void UpdateConfigUnifiVideo(CommandOption userNameNvr, CommandOption passWordNvr, CommandOption baseUrlNvr, NvrConfig nvrConfig)
         {
             Console.WriteLine("[Unifi Controller settings]");
             baseUrlNvr.Values.Insert(0, Prompt.GetString("Unifi Video URL: ", nvrConfig.BaseUrl));
-            userNameNvr.Values.Insert(0, Prompt.GetString("Username: ", nvrConfig.UserName ?? controllerConfig.UserName));
-            passWordNvr.Values.Insert(0, Prompt.GetString("Password - saved in plain text in the settings file: ", nvrConfig.Password ?? controllerConfig.Password));
-            MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
+            userNameNvr.Values.Insert(0, Prompt.GetString("Username: ", nvrConfig.UserName));
+            passWordNvr.Values.Insert(0, Prompt.GetString("Password - saved in plain text in the settings file: ", nvrConfig.Password));
             MergeConfig(nvrConfig, userNameNvr, passWordNvr, baseUrlNvr);
             Console.WriteLine();
         }
@@ -225,7 +228,7 @@ namespace TwicePower.Unifi.PrecenseChecker
         {
             Console.WriteLine("[Unifi Controller settings]");
             optionBaseUrlController.Values.Insert(0, Prompt.GetString("Unifi controller URL: ", controllerConfig.BaseUrl));
-            optionSitename.Values.Insert(0, Prompt.GetString("Sitename (if other then default): ", controllerConfig.ControllerSiteDescription));
+            optionSitename.Values.Insert(0, Prompt.GetString("Site name as displayed in the Controller user interface: ", controllerConfig.ControllerSiteDescription));
             optionUserNameController.Values.Insert(0, Prompt.GetString("Username: ", controllerConfig.UserName));
             optionPassWordController.Values.Insert(0, Prompt.GetString("Password - saved in plain text in the settings file: ", controllerConfig.Password));
             MergeConfig(controllerConfig, optionSitename, optionUserNameController, optionPassWordController, optionBaseUrlController);
@@ -278,20 +281,28 @@ namespace TwicePower.Unifi.PrecenseChecker
             }
         }
 
-        private static async Task OutputConnectedCamerasToConsole(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig)
+        private static async Task OutputConnectedCamerasToConsole(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig, ILogger logger)
         {
-            Status status = await GetNvrStatus(nvrConfig, presenceConfig);
+            Status status = await GetNvrStatus(nvrConfig, presenceConfig, logger);
             if (status != null)
             {
                 WriteNvrStatusToConsole(status);
             }
         }
 
-        private static async Task<Status> GetNvrStatus(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig)
+        private static async Task<Status> GetNvrStatus(NvrConfig nvrConfig, PresenceRecordingSettings presenceConfig, ILogger logger)
         {
             var nvrClient = new TwicePower.Unifi.UnifiVideoClient(GetHttpClient(nvrConfig.BaseUrl, presenceConfig.SOCKS, presenceConfig.VerifySsl));
-            var status = await nvrClient.GetStatus();
-            return status;
+            if(await nvrClient.Login(nvrConfig.UserName, nvrConfig.Password))
+            {
+                var status = await nvrClient.GetStatus();
+                return status;
+            }
+            else
+            {
+                logger.LogError("Failed to log on to Unifi Video");
+            }
+            return null;
         }
 
         private static void WriteNvrStatusToConsole(Status status)
@@ -327,7 +338,7 @@ namespace TwicePower.Unifi.PrecenseChecker
             for (int i = 0; i < wireLessClients.Length; i++)
             {
                 var client = wireLessClients[i];
-                Console.WriteLine($"{i.ToString().PadRight(6)}{client.Mac.PadRight(20, ' ')} {client.Hostname ?? "".PadRight(30, ' ')}{client.Idletime}");
+                Console.WriteLine($"{i.ToString().PadRight(6)}{client.Mac.PadRight(20, ' ')} {(client.Hostname ?? "").PadRight(30, ' ')}{client.Idletime}");
             }
         }
 
@@ -364,7 +375,16 @@ namespace TwicePower.Unifi.PrecenseChecker
             var loginResult = await controllerClient.Login(controllerConfig.UserName, controllerConfig.Password);
             if (loginResult == true)
             {
-                var siteName = controllerClient.GetSites().Result.FirstOrDefault(p => string.Compare(controllerConfig.ControllerSiteDescription, p.Desc, StringComparison.InvariantCultureIgnoreCase) == 0).Name;
+                var sites = await controllerClient.GetSites();
+                string siteName = null;
+                if (string.IsNullOrEmpty(controllerConfig.ControllerSiteDescription) || controllerConfig.ControllerSiteDescription?.ToLower() == "default")
+                {
+                    siteName = sites.FirstOrDefault(p => string.Compare("default", p.Name, StringComparison.InvariantCultureIgnoreCase) == 0)?.Name;
+                }
+                else
+                {
+                    siteName =sites.FirstOrDefault(p => string.Compare(controllerConfig.ControllerSiteDescription, p.Desc, StringComparison.InvariantCultureIgnoreCase) == 0)?.Name;
+                }
                 if (siteName == null)
                 {
                     logger.LogError($"The controller site description {controllerConfig.ControllerSiteDescription} could not be found.");

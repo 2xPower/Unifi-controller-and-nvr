@@ -5,6 +5,7 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <UserSecretsId>9A60BB95CACA41D5ADA9B887F6C9D44D</UserSecretsId>
     <StartupObject>TwicePower.Unifi.PrecenseChecker.Program</StartupObject>
+    <AssemblyName>tup</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
