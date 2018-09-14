@@ -1,10 +1,10 @@
 # Unifi controller and nvr integration
 This application is for use with products from Ubiquiti Networks. The Unifi Controller and Unifi NVR to be more precise.
-The API's used to implement needed functionality are not supported for third-party developers, like myself, so they are subject to changed without notice.
 
 ## Use case
-I have some camera's in my home. Those camera's should not record while family members are on premise.
-But when we are not at home, the camera's should start recording motion events.
+I have some camera's in and around my home. Camera's that monitor the edges (front and back door, gate, backyard) should record all motion events.
+But the camera's in my kitching, living room, etc should not record while family members are on premise.
+As soon as no one is at home though, the camera's should start recording motion events.
 
 # Getting started
 - [Download](https://github.com/2xPower/Unifi-controller-and-nvr/releases) the build for your system and unzip in a suitable location

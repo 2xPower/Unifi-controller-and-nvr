@@ -51,7 +51,7 @@ namespace TwicePower.Unifi.Tests
         public async Task Login_Succeeds_SslverifyFalse()
         {
             //needs a localhost socks proxy (like fiddler)
-            HttpClient httpClient = GetHttpClient(configWithInvalidSsl.BaseUrl, configWithInvalidSsl.SocksProxy, configWithInvalidSsl.VerifySsl);
+            HttpClient httpClient = GetHttpClient(configWithInvalidSsl.BaseUrl, null, false);
             var uc = new UnifiControllerClient(httpClient);
             await uc.Login(config.UserName, config.Password);
         }
